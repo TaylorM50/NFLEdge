@@ -1,0 +1,44 @@
+name: Publish NFL EDGE Context Lab
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '13 * * * *'
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+concurrency:
+  group: pages
+  cancel-in-progress: false
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+      - run: python build.py
+      - name: Validate artifact
+        run: |
+          python - <<'PY'
+          import json
+          d=json.load(open('public/data.json'))
+          assert len(d['teams']) == 32
+          assert all(0 <= g['home_probability'] <= 1 for g in d['games'])
+          assert all(p['lower'] <= p['prediction'] <= p['upper'] for p in d['players'])
+          PY
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: public
+      - id: deploy
+        uses: actions/deploy-pages@v4
